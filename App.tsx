@@ -1,10 +1,44 @@
 import React, { useState } from 'react';
-import { Loan, LoanStatus, ItemCategory, MarketplaceItem } from './types';
+import { Loan, LoanStatus, ItemCategory, MarketplaceItem, Client } from './types';
 import AdminDashboard from './components/AdminDashboard';
+import AdminClients from './components/AdminClients';
+import AdminStore from './components/AdminStore';
+import AdminProfile from './components/AdminProfile';
+import AdminNotifications from './components/AdminNotifications';
 import ClientApp from './components/ClientApp';
-import { Store, User, LogOut, ArrowRight, Lock, Wallet, Users, ShoppingBag, UserCircle, Construction } from 'lucide-react';
+import { Store, User, LogOut, ArrowRight, Lock, Wallet, Users, ShoppingBag, UserCircle, Construction, Bell } from 'lucide-react';
 
 // Mock Data
+const MOCK_CLIENTS: Client[] = [
+  {
+    id: 'U1',
+    name: 'Juan Pérez',
+    email: 'juan.perez@email.com',
+    phone: '+52 55 1234 5678',
+    rating: 4.8,
+    joinDate: '2023-01-15',
+    totalLoans: 5
+  },
+  {
+    id: 'U2',
+    name: 'Maria Lopez',
+    email: 'maria.lopez@email.com',
+    phone: '+52 55 8765 4321',
+    rating: 5.0,
+    joinDate: '2023-03-20',
+    totalLoans: 2
+  },
+  {
+    id: 'U3',
+    name: 'Carlos Ruiz',
+    email: 'carlos.ruiz@email.com',
+    phone: '+52 55 1122 3344',
+    rating: 3.5,
+    joinDate: '2023-06-10',
+    totalLoans: 1
+  }
+];
+
 const MOCK_LOANS: Loan[] = [
   {
     id: 'CTR-001',
@@ -24,7 +58,10 @@ const MOCK_LOANS: Loan[] = [
     startDate: '2023-10-01',
     dueDate: '2023-11-01',
     status: LoanStatus.ACTIVE,
-    amountDue: 231
+    amountDue: 231,
+    currency: 'USD',
+    paymentFrequency: 'Mensual',
+    duration: 3
   },
   {
     id: 'CTR-002',
@@ -44,7 +81,10 @@ const MOCK_LOANS: Loan[] = [
     startDate: '2023-09-15',
     dueDate: '2023-10-15',
     status: LoanStatus.OVERDUE,
-    amountDue: 56 // Interest added
+    amountDue: 56,
+    currency: 'USD',
+    paymentFrequency: 'Mensual',
+    duration: 1
   },
   {
     id: 'CTR-003',
@@ -59,12 +99,39 @@ const MOCK_LOANS: Loan[] = [
       images: ['https://picsum.photos/202'],
       marketValue: 300
     },
-    loanAmount: 150,
+    loanAmount: 5400,
     interestRate: 0.04,
     startDate: '2023-10-05',
     dueDate: '2023-11-05',
     status: LoanStatus.ACTIVE,
-    amountDue: 156
+    amountDue: 5616,
+    currency: 'NIO',
+    paymentFrequency: 'Mensual',
+    duration: 6
+  },
+  // Added a pending loan for demonstration
+  {
+    id: 'REQ-004',
+    clientId: 'U3',
+    clientName: 'Carlos Ruiz',
+    item: {
+      id: 'I4',
+      name: 'MacBook Air M1',
+      description: 'Modelo 2020, Gris Espacial',
+      category: ItemCategory.ELECTRONICS,
+      condition: 9,
+      images: ['https://picsum.photos/204'],
+      marketValue: 700
+    },
+    loanAmount: 350,
+    interestRate: 0.05,
+    startDate: new Date().toISOString(),
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    status: LoanStatus.PENDING,
+    amountDue: 367.5,
+    currency: 'USD',
+    paymentFrequency: 'Mensual',
+    duration: 1
   }
 ];
 
@@ -111,9 +178,10 @@ const ADMIN_EMAIL = 'axel23081994@gmail.com';
 
 const App: React.FC = () => {
   const [view, setView] = useState<'ADMIN' | 'CLIENT' | 'LOGIN'>('LOGIN');
-  const [adminTab, setAdminTab] = useState<'PERFIL' | 'CARTERA' | 'TIENDA' | 'CLIENTES'>('CARTERA');
+  const [adminTab, setAdminTab] = useState<'PERFIL' | 'CARTERA' | 'TIENDA' | 'CLIENTES' | 'NOTIFICACIONES'>('CARTERA');
   const [email, setEmail] = useState('');
   const [loans, setLoans] = useState<Loan[]>(MOCK_LOANS);
+  const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [marketItems, setMarketItems] = useState<MarketplaceItem[]>(MOCK_MARKETPLACE);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -133,30 +201,92 @@ const App: React.FC = () => {
     setAdminTab('CARTERA');
   };
 
-  const handleAddLoan = () => {
-    // Simulation of adding a new loan for Admin demo
-    const newLoan: Loan = {
-      id: `CTR-${Math.floor(Math.random() * 1000)}`,
-      clientId: 'U3',
-      clientName: 'Nuevo Cliente',
-      item: {
-        id: `I-${Date.now()}`,
-        name: 'Reloj Casio G-Shock',
-        description: 'Modelo clásico negro',
-        category: ItemCategory.JEWELRY,
-        condition: 10,
-        images: ['https://picsum.photos/203'],
-        marketValue: 100
-      },
-      loanAmount: 50,
-      interestRate: 0.05,
-      startDate: new Date().toISOString(),
-      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      status: LoanStatus.ACTIVE,
-      amountDue: 52.5
+  const handleAddLoan = (newLoan?: Loan) => {
+    // If a loan object is provided, use it
+    if (newLoan) {
+      setLoans([newLoan, ...loans]);
+      alert("Préstamo registrado exitosamente.");
+    } else {
+      // Simulation of adding a new loan for Admin demo (legacy behavior)
+      const simLoan: Loan = {
+        id: `CTR-${Math.floor(Math.random() * 1000)}`,
+        clientId: 'U3',
+        clientName: 'Nuevo Cliente',
+        item: {
+          id: `I-${Date.now()}`,
+          name: 'Reloj Casio G-Shock',
+          description: 'Modelo clásico negro',
+          category: ItemCategory.JEWELRY,
+          condition: 10,
+          images: ['https://picsum.photos/203'],
+          marketValue: 100
+        },
+        loanAmount: 50,
+        interestRate: 0.05,
+        startDate: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        status: LoanStatus.ACTIVE,
+        amountDue: 52.5,
+        currency: 'USD',
+        paymentFrequency: 'Mensual',
+        duration: 1
+      };
+      setLoans([simLoan, ...loans]);
+      alert("Préstamo simulado creado exitosamente.");
+    }
+  };
+
+  const handleRegisterClient = (newClient: Client, firstLoan: Loan) => {
+    setClients([newClient, ...clients]);
+    setLoans([firstLoan, ...loans]);
+    alert("Cliente registrado y préstamo creado exitosamente.");
+  };
+
+  const handleUpdateLoan = (updatedLoan: Loan) => {
+    setLoans(prev => prev.map(l => l.id === updatedLoan.id ? updatedLoan : l));
+  };
+
+  // Logic for Defaulting a Loan (Producto Perdido)
+  const handleDefaultLoan = (loan: Loan) => {
+    // 1. Create a Marketplace Item from the Loan Item
+    const newItem: MarketplaceItem = {
+      id: `M-${Date.now()}`,
+      name: loan.item.name,
+      description: loan.item.description,
+      category: loan.item.category,
+      condition: loan.item.condition,
+      images: loan.item.images,
+      marketValue: loan.item.marketValue,
+      price: loan.loanAmount, // CRITICAL: Price is the original loan amount
+      loanId: loan.id,
+      status: 'AVAILABLE'
     };
-    setLoans([newLoan, ...loans]);
-    alert("Préstamo simulado creado exitosamente.");
+
+    // 2. Update Loan Status to DEFAULTED
+    const updatedLoan = { ...loan, status: LoanStatus.DEFAULTED };
+
+    // 3. Update State
+    setMarketItems([newItem, ...marketItems]);
+    setLoans(prev => prev.map(l => l.id === loan.id ? updatedLoan : l));
+
+    alert(`El artículo "${loan.item.name}" ha sido marcado como perdido y enviado a la tienda con precio $${loan.loanAmount}.`);
+  };
+
+  const handleDeleteLoan = (loanId: string) => {
+    setLoans(prev => prev.filter(l => l.id !== loanId));
+  };
+
+  // Marketplace Handlers
+  const handleAddMarketItem = (item: MarketplaceItem) => {
+    setMarketItems([item, ...marketItems]);
+  };
+
+  const handleUpdateMarketItem = (updatedItem: MarketplaceItem) => {
+    setMarketItems(prev => prev.map(item => item.id === updatedItem.id ? updatedItem : item));
+  };
+
+  const handleDeleteMarketItem = (itemId: string) => {
+    setMarketItems(prev => prev.filter(item => item.id !== itemId));
   };
 
   if (view === 'LOGIN') {
@@ -214,17 +344,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Helper for admin placeholder pages
-  const AdminPlaceholder = ({ title, icon: Icon }: { title: string, icon: any }) => (
-    <div className="flex flex-col items-center justify-center h-[60vh] text-slate-400 animate-in fade-in">
-      <div className="p-4 bg-slate-200 rounded-full mb-4">
-        <Icon size={48} />
-      </div>
-      <h2 className="text-2xl font-bold text-slate-600 mb-2">{title}</h2>
-      <p>Módulo en desarrollo.</p>
-    </div>
-  );
-
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-slate-100">
       
@@ -280,7 +399,6 @@ const App: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      {/* Added mb-16 for mobile bottom nav space, removed ml-16 on mobile. Updated desktop margin to ml-20 due to slightly wider sidebar */}
       <main className={`flex-1 ${view === 'ADMIN' ? 'md:ml-20' : 'md:ml-20'} mb-16 md:mb-0 p-0 md:p-6 overflow-x-hidden w-full`}>
         <div className="max-w-7xl mx-auto h-full">
           {view === 'ADMIN' ? (
@@ -292,16 +410,32 @@ const App: React.FC = () => {
                     {adminTab === 'PERFIL' && 'Perfil de Administrador'}
                     {adminTab === 'TIENDA' && 'Gestión de Tienda'}
                     {adminTab === 'CLIENTES' && 'Directorio de Clientes'}
+                    {adminTab === 'NOTIFICACIONES' && 'Notificaciones'}
                   </h1>
                   <p className="text-sm md:text-base text-slate-500">Sesión activa: {email}</p>
+                </div>
+                
+                {/* Notification Icon Area */}
+                <div className="flex items-center gap-3">
+                   <button 
+                    onClick={() => setAdminTab('NOTIFICACIONES')}
+                    className={`relative p-3 rounded-full transition-all shadow-sm group
+                      ${adminTab === 'NOTIFICACIONES' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:text-blue-600 hover:bg-blue-50'}
+                    `}
+                    title="Notificaciones"
+                   >
+                      <Bell size={24} />
+                      <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                   </button>
                 </div>
               </header>
               
               {/* Content Switching */}
-              {adminTab === 'CARTERA' && <AdminDashboard loans={loans} onAddLoan={handleAddLoan} />}
-              {adminTab === 'PERFIL' && <AdminPlaceholder title="Perfil" icon={UserCircle} />}
-              {adminTab === 'TIENDA' && <AdminPlaceholder title="Tienda e Inventario" icon={ShoppingBag} />}
-              {adminTab === 'CLIENTES' && <AdminPlaceholder title="Clientes" icon={Users} />}
+              {adminTab === 'CARTERA' && <AdminDashboard loans={loans} onAddLoan={() => handleAddLoan()} onDefaultLoan={handleDefaultLoan} />}
+              {adminTab === 'PERFIL' && <AdminProfile loans={loans} clients={clients} onUpdateLoan={handleUpdateLoan} onDeleteLoan={handleDeleteLoan} onAddLoan={handleAddLoan} onDefaultLoan={handleDefaultLoan} />}
+              {adminTab === 'TIENDA' && <AdminStore items={marketItems} onAddItem={handleAddMarketItem} onUpdateItem={handleUpdateMarketItem} onDeleteItem={handleDeleteMarketItem} />}
+              {adminTab === 'CLIENTES' && <AdminClients clients={clients} loans={loans} onRegisterClient={handleRegisterClient} onAddLoan={handleAddLoan} />}
+              {adminTab === 'NOTIFICACIONES' && <AdminNotifications />}
 
             </div>
           ) : (

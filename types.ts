@@ -3,6 +3,7 @@ export enum LoanStatus {
   OVERDUE = 'OVERDUE',
   REDEEMED = 'REDEEMED',
   DEFAULTED = 'DEFAULTED', // Passed to shop
+  PENDING = 'PENDING', // Info only / No active loan
 }
 
 export enum ItemCategory {
@@ -24,6 +25,16 @@ export interface Item {
   marketValue: number;
 }
 
+export interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  rating: number; // 1-5
+  joinDate: string;
+  totalLoans: number;
+}
+
 export interface Loan {
   id: string;
   clientId: string;
@@ -35,6 +46,9 @@ export interface Loan {
   dueDate: string; // ISO Date
   status: LoanStatus;
   amountDue: number; // Total to pay to redeem
+  currency: 'NIO' | 'USD';
+  paymentFrequency: 'Diario' | 'Semanal' | 'Quincenal' | 'Mensual';
+  duration: number; // Loan duration in months
 }
 
 export interface MarketplaceItem extends Item {

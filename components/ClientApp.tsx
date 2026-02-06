@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Loan, MarketplaceItem, ValuationResult, LoanStatus } from '../types';
 import { appraiseItem } from '../services/geminiService';
-import { Calculator, ShoppingBag, CreditCard, Bell, Camera, Loader2, ArrowRight } from 'lucide-react';
+import { Calculator, ShoppingBag, CreditCard, Bell, Camera, Loader2, ArrowRight, CheckCircle, AlertTriangle, Tag, Clock, ChevronRight, Eye } from 'lucide-react';
 
 interface ClientAppProps {
   loans: Loan[];
@@ -9,9 +9,46 @@ interface ClientAppProps {
   currentUserId: string;
 }
 
+const NOTIFICATIONS = [
+  { 
+    id: 1, 
+    title: 'Recordatorio de Pago', 
+    message: 'Tu préstamo del PlayStation 5 vence en 3 días. Evita recargos por mora.', 
+    date: 'Hace 2 horas', 
+    type: 'ALERT', 
+    read: false 
+  },
+  { 
+    id: 2, 
+    title: '¡Oferta Especial!', 
+    message: 'Tenemos un descuento del 10% en intereses si refrendas tu contrato hoy.', 
+    date: 'Hace 1 día', 
+    type: 'OFFER', 
+    read: true 
+  },
+  { 
+    id: 3, 
+    title: 'Pago Confirmado', 
+    message: 'Hemos recibido tu abono de $50.00 correctamente. Tu saldo se ha actualizado.', 
+    date: 'Hace 5 días', 
+    type: 'SUCCESS', 
+    read: true 
+  },
+  {
+    id: 4,
+    title: 'Artículo Vendido',
+    message: 'El artículo que marcaste como "Interesado" ya no está disponible.',
+    date: 'Hace 1 semana',
+    type: 'INFO',
+    read: true
+  }
+];
+
 const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentUserId }) => {
-  const [activeTab, setActiveTab] = useState<'loans' | 'calculator' | 'shop'>('loans');
+  const [activeTab, setActiveTab] = useState<'loans' | 'calculator' | 'shop' | 'notifications'>('loans');
   const userLoans = loans.filter(l => l.clientId === currentUserId);
+
+  const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
 
   return (
     // Updated container: w-full h-full on mobile (native feel), constrained on desktop (phone mock)
@@ -20,9 +57,14 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
       {/* Mobile Header */}
       <div className="bg-blue-600 p-4 text-white flex justify-between items-center sticky top-0 z-10 shadow-md flex-shrink-0">
         <h1 className="text-xl font-bold tracking-tight">PrestaValor</h1>
-        <button className="p-2 bg-blue-500 rounded-full hover:bg-blue-400 transition relative">
+        <button 
+          onClick={() => setActiveTab('notifications')}
+          className="p-2 bg-blue-500 rounded-full hover:bg-blue-400 transition relative"
+        >
           <Bell size={20} />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full border border-blue-500"></span>
+          {unreadCount > 0 && (
+             <span className="absolute top-1 right-1 w-2 h-2 bg-red-400 rounded-full border border-blue-500 animate-pulse"></span>
+          )}
         </button>
       </div>
 
@@ -67,12 +109,17 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
                       </div>
                    </div>
 
-                   <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                      <button className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition">
-                         Pagar Interés
-                      </button>
-                      <button className="flex-1 bg-white border border-blue-600 text-blue-600 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition">
-                         Rescatar
+                   <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <button className="flex-1 bg-emerald-500 text-white py-2 rounded-lg text-sm font-medium hover:bg-emerald-600 transition shadow-sm">
+                           Abonar
+                        </button>
+                        <button className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition">
+                           Pagar Interés
+                        </button>
+                      </div>
+                      <button className="w-full bg-slate-50 border border-slate-200 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition flex items-center justify-center gap-2">
+                         <Eye size={16} /> Ver Detalles
                       </button>
                    </div>
                 </div>
@@ -131,6 +178,52 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
              </div>
           </div>
         )}
+
+        {activeTab === 'notifications' && (
+           <div className="space-y-4 animate-in fade-in slide-in-from-right duration-500">
+              <h2 className="text-lg font-bold text-slate-800 px-1">Centro de Mensajes</h2>
+              <div className="space-y-3">
+                 {NOTIFICATIONS.map(notif => (
+                    <div key={notif.id} className={`bg-white p-4 rounded-xl border relative overflow-hidden transition-all ${!notif.read ? 'border-blue-200 shadow-sm' : 'border-slate-100 opacity-90'}`}>
+                       {!notif.read && (
+                          <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                       )}
+                       <div className="flex gap-3">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 
+                             ${notif.type === 'ALERT' ? 'bg-red-50 text-red-500' : ''}
+                             ${notif.type === 'OFFER' ? 'bg-purple-50 text-purple-500' : ''}
+                             ${notif.type === 'SUCCESS' ? 'bg-emerald-50 text-emerald-500' : ''}
+                             ${notif.type === 'INFO' ? 'bg-blue-50 text-blue-500' : ''}
+                          `}>
+                             {notif.type === 'ALERT' && <AlertTriangle size={20} />}
+                             {notif.type === 'OFFER' && <Tag size={20} />}
+                             {notif.type === 'SUCCESS' && <CheckCircle size={20} />}
+                             {notif.type === 'INFO' && <Bell size={20} />}
+                          </div>
+                          <div className="flex-1">
+                             <div className="flex justify-between items-start mb-1">
+                                <h3 className={`text-sm font-bold ${!notif.read ? 'text-slate-800' : 'text-slate-600'}`}>{notif.title}</h3>
+                                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                                   <Clock size={10} /> {notif.date}
+                                </span>
+                             </div>
+                             <p className="text-xs text-slate-500 leading-relaxed">{notif.message}</p>
+                          </div>
+                       </div>
+                       {!notif.read && (
+                          <div className="flex justify-end mt-2">
+                             <button className="text-[10px] font-bold text-blue-600 flex items-center gap-1 hover:underline">
+                                Marcar como leído <ChevronRight size={10} />
+                             </button>
+                          </div>
+                       )}
+                    </div>
+                 ))}
+              </div>
+              <p className="text-center text-xs text-slate-400 mt-4">No tienes más notificaciones.</p>
+           </div>
+        )}
+
       </div>
 
       {/* Bottom Navigation */}
