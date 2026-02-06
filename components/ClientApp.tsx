@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Loan, MarketplaceItem, ValuationResult, LoanStatus } from '../types';
 import { appraiseItem } from '../services/geminiService';
-import { Calculator, ShoppingBag, CreditCard, Bell, Camera, Loader2, ArrowRight, CheckCircle, AlertTriangle, Tag, Clock, ChevronRight, Eye, Wallet, HelpCircle, ArrowLeft, Percent, Info } from 'lucide-react';
+import { Calculator, ShoppingBag, CreditCard, Bell, Camera, Loader2, ArrowRight, CheckCircle, AlertTriangle, Tag, Clock, ChevronRight, Eye, Wallet, HelpCircle, ArrowLeft, Percent, Info, Calendar, FileText, ClipboardList, Printer, Download, History, X } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 interface ClientAppProps {
   loans: Loan[];
@@ -49,6 +50,7 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
   
   // State to track which loan is currently opening the modal
   const [confirmingLoanId, setConfirmingLoanId] = useState<string | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
   
   // State to track interest payment modal
   const [interestPaymentLoanId, setInterestPaymentLoanId] = useState<string | null>(null);
@@ -63,8 +65,19 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
   // State to track loans that have a pending payment verification (orange button)
   const [pendingLoanIds, setPendingLoanIds] = useState<string[]>([]);
   
+  // Receipt State
+  const [showReceipt, setShowReceipt] = useState(false);
+  const [receiptMode, setReceiptMode] = useState<'FULL' | 'LAST'>('LAST');
+
   const userLoans = loans.filter(l => l.clientId === currentUserId);
   const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
+
+  // Reset selected loan when tab changes
+  useEffect(() => {
+    if (activeTab !== 'loans') {
+        setSelectedLoan(null);
+    }
+  }, [activeTab]);
 
   // --- HANDLERS FOR ABONAR (CAPITAL/CUSTOM) ---
   const handleAbonarClick = (loanId: string) => {
@@ -117,10 +130,79 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
 
   const selectedInterestLoan = loans.find(l => l.id === interestPaymentLoanId);
 
+  // Helper to generate mock schedule for details view
+  const generateSchedule = (loan: Loan) => {
+     const count = loan.duration || 1;
+     const items = [];
+     const start = new Date(loan.startDate);
+     const amount = loan.amountDue / count;
+     
+     for (let i = 1; i <= count; i++) {
+        const d = new Date(start);
+        d.setMonth(d.getMonth() + i);
+        // Mock status: First one paid if active
+        let status = 'PENDING';
+        if (loan.status === LoanStatus.ACTIVE && i === 1) status = 'PAID';
+        if (loan.status === LoanStatus.OVERDUE && i === 1) status = 'OVERDUE';
+        
+        items.push({
+            num: i,
+            date: d.toLocaleDateString(),
+            amount: amount,
+            status
+        });
+     }
+     return items;
+  };
+
+  const handleDownloadReceipt = async () => {
+    const element = document.getElementById('printable-receipt');
+    if (element && selectedLoan) {
+        try {
+            const canvas = await html2canvas(element, {
+                scale: 2,
+                backgroundColor: '#ffffff',
+                logging: false,
+            });
+            const data = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.href = data;
+            link.download = `Recibo-${selectedLoan.id}-${receiptMode}.png`;
+            link.click();
+        } catch (error) {
+            console.error("Error generating receipt:", error);
+            alert("Error al descargar el recibo.");
+        }
+    }
+  };
+
 
   return (
     // Updated container: w-full h-full on mobile (native feel), constrained on desktop (phone mock)
     <div className="w-full h-full flex flex-col bg-slate-50 md:max-w-md md:mx-auto md:border md:border-slate-200 md:rounded-2xl md:h-[800px] md:shadow-2xl overflow-hidden relative">
+      <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            #printable-receipt, #printable-receipt * {
+              visibility: visible;
+            }
+            #printable-receipt {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              background: white;
+              color: black;
+              padding: 20px;
+              box-shadow: none !important;
+              border: none !important;
+            }
+            /* Hide scrollbars during print */
+            ::-webkit-scrollbar { display: none; }
+          }
+      `}</style>
       
       {/* Mobile Header */}
       <div className="bg-blue-600 p-4 text-white flex justify-between items-center sticky top-0 z-10 shadow-md flex-shrink-0">
@@ -139,7 +221,7 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto p-4 pb-24 scroll-smooth">
         
-        {activeTab === 'loans' && (
+        {activeTab === 'loans' && !selectedLoan && (
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-lg font-bold text-slate-800">Mis Empeños Activos</h2>
             {userLoans.length === 0 ? (
@@ -149,6 +231,8 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
             ) : (
               userLoans.map(loan => {
                 const isPending = pendingLoanIds.includes(loan.id);
+                const currencySym = loan.currency === 'NIO' ? 'C$' : '$';
+                const interestAmount = loan.amountDue - loan.loanAmount;
 
                 return (
                   <div key={loan.id} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 relative overflow-hidden">
@@ -169,18 +253,31 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
                        </span>
                      </div>
   
-                     <div className="flex justify-between items-end">
-                        <div>
-                          <p className="text-xs text-slate-500 mb-1">Total a Pagar</p>
-                          <p className="text-xl font-bold text-slate-900">${loan.amountDue}</p>
-                        </div>
-                        <div className="text-right">
-                           <p className="text-xs text-slate-500 mb-1">Vence</p>
+                     <div className="flex justify-between items-end mb-3">
+                        <div className="text-right w-full">
+                           <p className="text-xs text-slate-500 mb-1">Vence el</p>
                            <p className="text-sm font-medium text-slate-700">{new Date(loan.dueDate).toLocaleDateString()}</p>
                         </div>
                      </div>
+
+                     {/* Desglose de Pago */}
+                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 mb-4 text-sm">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Desglose de Cuota</p>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-slate-500 text-xs">Capital Prestado</span>
+                            <span className="font-medium text-slate-700">{currencySym}{loan.loanAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-slate-500 text-xs">Interés Generado</span>
+                            <span className="font-medium text-blue-600">+{currencySym}{interestAmount.toFixed(2)}</span>
+                        </div>
+                        <div className="border-t border-slate-200 mt-2 pt-2 flex justify-between items-center">
+                            <span className="font-bold text-slate-800 text-xs uppercase">Total a Pagar</span>
+                            <span className="font-black text-lg text-slate-900">{currencySym}{loan.amountDue.toFixed(2)}</span>
+                        </div>
+                     </div>
   
-                     <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                     <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
                         <div className="flex gap-2">
                           <button 
                             onClick={() => !isPending && handleInterestClick(loan.id)}
@@ -205,8 +302,11 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
                              {isPending ? 'En Espera' : 'Abonar'}
                           </button>
                         </div>
-                        <button className="w-full bg-slate-50 border border-slate-200 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition flex items-center justify-center gap-2">
-                           <Eye size={16} /> Ver Detalles
+                        <button 
+                            onClick={() => setSelectedLoan(loan)}
+                            className="w-full bg-slate-50 border border-slate-200 text-slate-600 py-2 rounded-lg text-sm font-medium hover:bg-slate-100 transition flex items-center justify-center gap-2"
+                        >
+                           <Eye size={16} /> Ver Detalles Completos
                         </button>
                      </div>
                   </div>
@@ -225,6 +325,168 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
                </button>
             </div>
           </div>
+        )}
+
+        {/* DETAILS VIEW */}
+        {activeTab === 'loans' && selectedLoan && (
+            <div className="animate-in fade-in slide-in-from-right duration-300 pb-4">
+                <button 
+                    onClick={() => setSelectedLoan(null)} 
+                    className="mb-4 flex items-center gap-2 text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                    <ArrowLeft size={20}/> <span className="font-medium">Volver a mis empeños</span>
+                </button>
+                
+                {/* Hero Card */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                    <div className="relative h-56 bg-slate-200">
+                        <img 
+                            src={selectedLoan.item.images[0]} 
+                            alt={selectedLoan.item.name}
+                            className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
+                        <div className="absolute bottom-4 left-4 text-white">
+                            <span className="text-xs font-bold bg-white/20 backdrop-blur-md px-2 py-1 rounded-lg border border-white/30 mb-2 inline-block">
+                                {selectedLoan.item.category}
+                            </span>
+                            <h2 className="text-2xl font-bold leading-tight">{selectedLoan.item.name}</h2>
+                        </div>
+                        <div className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold shadow-sm
+                            ${selectedLoan.status === LoanStatus.ACTIVE ? 'bg-emerald-500 text-white' : 
+                              selectedLoan.status === LoanStatus.OVERDUE ? 'bg-red-500 text-white' : 'bg-slate-500 text-white'}`}>
+                            {selectedLoan.status === LoanStatus.ACTIVE ? 'ACTIVO' : 
+                             selectedLoan.status === LoanStatus.OVERDUE ? 'EN MORA' : selectedLoan.status}
+                        </div>
+                    </div>
+                    
+                    <div className="p-5">
+                        <div className="flex justify-between items-center mb-4">
+                            <div>
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Nº Contrato</p>
+                                <p className="text-slate-800 font-mono font-medium">{selectedLoan.id}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Fecha Inicio</p>
+                                <p className="text-slate-800 font-medium">{new Date(selectedLoan.startDate).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                        <p className="text-sm text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 italic">
+                            "{selectedLoan.item.description}"
+                        </p>
+                    </div>
+                </div>
+
+                {/* Financial Breakdown Expanded */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                            <Wallet size={18} />
+                        </div>
+                        <h3 className="font-bold text-slate-800">Detalle Financiero</h3>
+                    </div>
+                    
+                    <div className="space-y-3 text-sm">
+                        <div className="flex justify-between items-center p-3 rounded-lg bg-slate-50">
+                            <span className="text-slate-500">Préstamo Original</span> 
+                            <span className="font-bold text-slate-700">
+                                {selectedLoan.currency === 'NIO' ? 'C$' : '$'}{selectedLoan.loanAmount.toFixed(2)}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 rounded-lg bg-slate-50">
+                            <span className="text-slate-500">Tasa de Interés</span> 
+                            <span className="font-bold text-slate-700">{(selectedLoan.interestRate * 100).toFixed(1)}% Mensual</span>
+                        </div>
+                        <div className="flex justify-between items-center p-3 rounded-lg bg-slate-50">
+                            <span className="text-slate-500">Interés Acumulado</span> 
+                            <span className="font-bold text-blue-600">
+                                +{selectedLoan.currency === 'NIO' ? 'C$' : '$'}{(selectedLoan.amountDue - selectedLoan.loanAmount).toFixed(2)}
+                            </span>
+                        </div>
+                        
+                        <div className="border-t border-slate-100 pt-4 mt-2">
+                             <div className="flex justify-between items-end">
+                                <span className="font-bold text-slate-800 text-lg">Total a Pagar</span>
+                                <span className="font-black text-2xl text-slate-900 bg-emerald-50 px-3 py-1 rounded-lg text-emerald-700">
+                                    {selectedLoan.currency === 'NIO' ? 'C$' : '$'}{selectedLoan.amountDue.toFixed(2)}
+                                </span>
+                             </div>
+                             <p className="text-right text-xs text-slate-400 mt-1">Vence el {new Date(selectedLoan.dueDate).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Download Receipt Button */}
+                <button 
+                    onClick={() => setShowReceipt(true)}
+                    className="w-full bg-white border border-slate-300 text-slate-600 py-3 rounded-xl font-medium mb-6 hover:bg-slate-50 transition flex items-center justify-center gap-2 shadow-sm"
+                >
+                    <Printer size={18} /> Descargar Recibo / Estado de Cuenta
+                </button>
+
+                {/* Payment Schedule */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-24">
+                    <div className="flex items-center gap-2 mb-4">
+                         <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+                            <Calendar size={18} />
+                        </div>
+                        <h3 className="font-bold text-slate-800">Cronograma de Pagos</h3>
+                    </div>
+
+                    <div className="space-y-3">
+                        {generateSchedule(selectedLoan).map((item, idx) => (
+                            <div key={idx} className="flex items-center justify-between p-3 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
+                                        ${item.status === 'PAID' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                        {item.num}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-slate-700">{item.date}</p>
+                                        <p className="text-xs text-slate-400">{item.status === 'PAID' ? 'Pagado' : item.status === 'OVERDUE' ? 'Atrasado' : 'Pendiente'}</p>
+                                    </div>
+                                </div>
+                                <span className={`font-mono font-medium ${item.status === 'OVERDUE' ? 'text-red-500' : 'text-slate-600'}`}>
+                                    {selectedLoan.currency === 'NIO' ? 'C$' : '$'}{item.amount.toFixed(2)}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Sticky Actions Footer */}
+                <div className="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 z-30 md:absolute md:rounded-b-2xl">
+                     <div className="flex gap-3 max-w-md mx-auto">
+                        {(() => {
+                            const isPending = pendingLoanIds.includes(selectedLoan.id);
+                            return (
+                                <>
+                                    <button 
+                                        onClick={() => !isPending && handleInterestClick(selectedLoan.id)}
+                                        disabled={isPending}
+                                        className={`flex-1 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex flex-col items-center justify-center gap-1
+                                            ${isPending ? 'bg-orange-100 text-orange-600 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'}`}
+                                    >
+                                        <span>Pagar Interés</span>
+                                        <span className="text-[10px] font-normal opacity-80">
+                                            {selectedLoan.currency === 'NIO' ? 'C$' : '$'}{(selectedLoan.amountDue - selectedLoan.loanAmount).toFixed(2)}
+                                        </span>
+                                    </button>
+                                    <button 
+                                        onClick={() => !isPending && handleAbonarClick(selectedLoan.id)}
+                                        disabled={isPending}
+                                        className={`flex-1 py-3 rounded-xl font-bold text-sm shadow-md transition-all flex flex-col items-center justify-center gap-1
+                                            ${isPending ? 'bg-orange-100 text-orange-600 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95'}`}
+                                    >
+                                        <span>Abonar Capital</span>
+                                        <span className="text-[10px] font-normal opacity-80">Reducir deuda</span>
+                                    </button>
+                                </>
+                            );
+                        })()}
+                     </div>
+                </div>
+            </div>
         )}
 
         {activeTab === 'calculator' && (
@@ -462,6 +724,159 @@ const ClientApp: React.FC<ClientAppProps> = ({ loans, marketplaceItems, currentU
                     </div>
                   </>
                 )}
+            </div>
+        </div>
+      )}
+
+      {/* Receipt Modal */}
+      {showReceipt && selectedLoan && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="p-4 border-b border-slate-200 flex flex-col gap-4 bg-slate-50">
+                    <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer size={18}/> Opciones de Recibo</h3>
+                        <button onClick={() => setShowReceipt(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+                    </div>
+                    {/* Toggle Buttons */}
+                    <div className="flex bg-slate-200 p-1 rounded-lg">
+                        <button 
+                            onClick={() => setReceiptMode('LAST')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-xs font-bold transition ${receiptMode === 'LAST' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Clock size={14} /> Último Abono
+                        </button>
+                        <button 
+                            onClick={() => setReceiptMode('FULL')}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-xs font-bold transition ${receiptMode === 'FULL' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <History size={14} /> Historial Completo
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Printable Area */}
+                <div className="flex-1 overflow-y-auto p-8 bg-white" id="printable-receipt">
+                    <div className="text-center mb-6">
+                        <h1 className="text-xl font-black uppercase tracking-widest text-slate-900 mb-1">PRESTAVALOR</h1>
+                        <p className="text-xs text-slate-500 uppercase tracking-wide">
+                            {receiptMode === 'LAST' ? 'COMPROBANTE DE PAGO' : 'ESTADO DE CUENTA'}
+                        </p>
+                        <div className="mt-2 text-xs font-mono text-slate-500">
+                            {new Date().toLocaleString()}
+                        </div>
+                    </div>
+
+                    <div className="border-t-2 border-dashed border-slate-200 py-4 space-y-2 font-mono text-sm">
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Contrato:</span>
+                            <span className="font-bold text-slate-800">{selectedLoan.id}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Cliente:</span>
+                            <span className="font-bold text-slate-800">{selectedLoan.clientName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">Artículo:</span>
+                            <span className="font-bold text-slate-800 truncate max-w-[150px]">{selectedLoan.item.name}</span>
+                        </div>
+                    </div>
+
+                    <div className="border-t-2 border-dashed border-slate-200 py-4 font-mono text-sm">
+                        <h4 className="font-bold text-center mb-3 text-slate-800">
+                            {receiptMode === 'LAST' ? 'DETALLE DEL ABONO' : 'HISTORIAL DE PAGOS'}
+                        </h4>
+                        
+                        {(() => {
+                            const schedule = generateSchedule(selectedLoan);
+                            const paidInstallments = schedule.filter(s => s.status === 'PAID');
+                            const currencySym = selectedLoan.currency === 'NIO' ? 'C$' : '$';
+                            const lastPayment = paidInstallments.length > 0 ? paidInstallments[paidInstallments.length - 1] : null;
+
+                            return receiptMode === 'LAST' ? (
+                                lastPayment ? (
+                                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 text-center">
+                                        <div className="text-xs text-slate-500 mb-1">Pago Realizado</div>
+                                        <div className="text-2xl font-black text-slate-900 mb-2">{currencySym}{lastPayment.amount.toFixed(2)}</div>
+                                        <div className="text-xs text-slate-600">Cuota #{lastPayment.num} - {lastPayment.date}</div>
+                                    </div>
+                                ) : (
+                                    <p className="text-center text-red-400 italic text-xs">No se encontraron pagos recientes.</p>
+                                )
+                            ) : (
+                                paidInstallments.length === 0 ? (
+                                    <p className="text-center text-slate-400 italic">No hay pagos registrados.</p>
+                                    ) : (
+                                    <div className="space-y-2">
+                                        {paidInstallments.map((inst, i) => (
+                                            <div key={i} className="flex justify-between text-xs">
+                                                <span>Cuota #{inst.num} ({inst.date})</span>
+                                                <span className="font-bold">{currencySym}{inst.amount.toFixed(2)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    )
+                            );
+                        })()}
+                    </div>
+
+                    <div className="border-t-2 border-dashed border-slate-200 pt-4 space-y-2 font-mono text-sm">
+                        {receiptMode === 'FULL' && (() => {
+                             const schedule = generateSchedule(selectedLoan);
+                             const paidInstallments = schedule.filter(s => s.status === 'PAID');
+                             const totalPaid = paidInstallments.reduce((acc, curr) => acc + curr.amount, 0);
+                             const currencySym = selectedLoan.currency === 'NIO' ? 'C$' : '$';
+                             
+                             return (
+                                <>
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Total Deuda:</span>
+                                    <span>{currencySym}{selectedLoan.amountDue.toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-600">
+                                    <span>Total Pagado:</span>
+                                    <span>{currencySym}{totalPaid.toFixed(2)}</span>
+                                </div>
+                                </>
+                             );
+                        })()}
+                        
+                        <div className="flex justify-between text-lg font-black mt-2 pt-2 border-t border-slate-100">
+                            <span>SALDO RESTANTE:</span>
+                            <span>
+                                {selectedLoan.currency === 'NIO' ? 'C$' : '$'}
+                                {(selectedLoan.amountDue - generateSchedule(selectedLoan).filter(s => s.status === 'PAID').reduce((acc, curr) => acc + curr.amount, 0)).toFixed(2)}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="mt-12 text-center">
+                        <div className="font-handwriting text-3xl text-slate-700 mb-2 font-bold italic" style={{fontFamily: '"Brush Script MT", cursive'}}>
+                            Sneyder Studio
+                        </div>
+                        <div className="border-t-2 border-slate-300 w-48 mx-auto mb-2"></div>
+                        <p className="text-xs text-slate-400 uppercase font-bold tracking-wider">Firma Autorizada</p>
+                    </div>
+
+                    <div className="mt-8 text-center text-[10px] text-slate-400">
+                        <p>Gracias por su preferencia.</p>
+                        <p>PrestaValor - Soluciones Rápidas</p>
+                    </div>
+                </div>
+
+                <div className="p-4 border-t border-slate-200 bg-slate-50 flex gap-3">
+                    <button 
+                        onClick={() => setShowReceipt(false)}
+                        className="flex-1 py-2.5 border border-slate-300 bg-white text-slate-600 rounded-lg font-bold hover:bg-slate-100 transition"
+                    >
+                        Cerrar
+                    </button>
+                    <button 
+                        onClick={handleDownloadReceipt}
+                        className="flex-1 py-2.5 bg-slate-900 text-white rounded-lg font-bold hover:bg-black transition flex items-center justify-center gap-2 shadow-lg"
+                    >
+                        <Download size={18} /> Descargar Imagen
+                    </button>
+                </div>
             </div>
         </div>
       )}
