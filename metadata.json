@@ -1,0 +1,7 @@
+{
+  "name": "PrestaValor",
+  "description": "Una plataforma integral de préstamos prendarios y marketplace de segunda mano. Conecta liquidez inmediata con gestión de garantías.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
